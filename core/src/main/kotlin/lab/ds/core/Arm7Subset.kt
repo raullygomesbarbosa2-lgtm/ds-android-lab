@@ -17,14 +17,14 @@ class Arm7Subset(val memory: ByteArray = ByteArray(1 shl 20)) {
     fun load(words: IntArray, address: Int = 0) { words.forEachIndexed { i, w -> write32(address + i*4, w) }; r[15] = address }
     private fun cond(c: Int): Boolean {
         val n=cpsr ushr 31 != 0; val z=cpsr ushr 30 and 1 != 0; val cbit=cpsr ushr 29 and 1 != 0; val v=cpsr ushr 28 and 1 != 0
-        return when(c) { 0->z; 1->!z; 2->cbit; 3->!cbit; 4->n; 5->!n; 6->v; 7->!v; 8->cbit&&!z; 9->!cbit||z; 10->n==v; 11->n!=v; 12->!z&&n==v; 13->z||n!=v; 14->true; else->false }
+        return when(c) { 0->z; 1->!z; 2->cbit; 3->!cbit; 4->n; 5->!n; 6->v; 7->!v; 8->cbit&&!z; 9->!cbit||z; 10->n==v; 11->n!=v; 12->!z&&n==v; 13->z||n!=v; 14->true; 15->true; else->false }
     }
     private fun nz(x: Int) { cpsr = (cpsr and 0x3fffffff) or (if(x<0) Int.MIN_VALUE else 0) or (if(x==0) 1 shl 30 else 0) }
     fun step(): Int {
         if(halted) return 0
         val pc=r[15]; val ins=read32(pc); r[15]=pc+4
         if(!cond(ins ushr 28)) return 1
-        if(ins ushr 25 and 7 == 5) { val off=(ins shl 8 shr 6); if(ins ushr 24 and 1 != 0) r[14]=r[15]; r[15]=r[15]+off; return 3 }
+        if(ins ushr 25 and 7 == 5) { val off=(ins shl 8 shr 6); if(ins ushr 24 and 1 != 0) r[14]=r[15]; r[15]=r[15]+4+off; return 3 }
         if(ins ushr 26 and 3 == 1) {
             val load=ins ushr 20 and 1 != 0; val rn=ins ushr 16 and 15; val rd=ins ushr 12 and 15
             val base=r[rn]; val off=if(ins ushr 25 and 1 != 0) throw UnsupportedOperationException("register-offset transfer") else ins and 0xfff
