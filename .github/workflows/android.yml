@@ -1,0 +1,60 @@
+name: Android prototype build
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v3
+      - name: Build diagnostic APK
+        run: |
+          mkdir -p app/src/main/java/lab/ds/app app/src/main
+          cat > settings.gradle <<'EOF'
+          pluginManagement { repositories { google(); mavenCentral(); gradlePluginPortal() } }
+          dependencyResolutionManagement { repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS); repositories { google(); mavenCentral() } }
+          rootProject.name = 'DSAndroidLab'
+          include ':app'
+          EOF
+          cat > build.gradle <<'EOF'
+          plugins {
+              id 'com.android.application' version '8.6.1' apply false
+          }
+          EOF
+          cat > app/build.gradle <<'EOF'
+          plugins { id 'com.android.application' }
+          android { namespace 'lab.ds.app'; compileSdk 35
+              defaultConfig { applicationId 'lab.ds.app'; minSdk 24; targetSdk 28; versionCode 1; versionName '0.1-prototype' }
+          }
+          EOF
+          cat > app/src/main/AndroidManifest.xml <<'EOF'
+          <manifest xmlns:android="http://schemas.android.com/apk/res/android"><application android:theme="@android:style/Theme.Material.Light.NoActionBar" android:label="DS Lab Prototype"><activity android:name=".MainActivity" android:exported="true"><intent-filter><action android:name="android.intent.action.MAIN"/><category android:name="android.intent.category.LAUNCHER"/></intent-filter></activity></application></manifest>
+          EOF
+          cat > app/src/main/java/lab/ds/app/MainActivity.java <<'EOF'
+          package lab.ds.app;
+          import android.app.Activity;
+          import android.os.Bundle;
+          import android.graphics.Color;
+          import android.view.Gravity;
+          import android.widget.TextView;
+          import android.widget.LinearLayout;
+          public class MainActivity extends Activity {
+            @Override public void onCreate(Bundle b) { super.onCreate(b);
+              LinearLayout box=new LinearLayout(this); box.setOrientation(1); box.setGravity(Gravity.CENTER); box.setPadding(32,32,32,32); box.setBackgroundColor(Color.rgb(20,28,40));
+              TextView t=new TextView(this); t.setTextColor(Color.WHITE); t.setTextSize(21); t.setGravity(Gravity.CENTER); t.setText("DS Android Lab\n\nDiagnostic prototype only.\nNot a playable Nintendo DS emulator.\nNo BIOS or games included.\n\nSee the repository README for status."); box.addView(t); setContentView(box);
+            }
+          }
+          EOF
+          gradle wrapper --gradle-version 8.7
+          ./gradlew --no-daemon assembleDebug
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ds-android-lab-debug-apk
+          path: app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
