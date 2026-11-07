@@ -1,15 +1,17 @@
 # DS Android Lab
 
-An original, from-scratch Nintendo DS emulation research prototype. No melonDS, DeSmuME, or other emulator core is used or included. This is **not a complete emulator** and cannot run commercial DS games.
+An original-from-scratch emulator research project. No existing emulator core is used or included.
 
-## Current implementation
+## What is actually implemented
 
-- `Arm7Subset.kt`: a compact, newly written ARM-state interpreter for selected ARM7 instructions (data processing, branch, single data transfer, condition codes), with clear unsupported-instruction traps.
-- Diagnostic Android shell; not a game player.
-- JVM unit tests exercise arithmetic/flags, branch, memory and unsupported opcodes.
+- `core/src/main/kotlin/lab/ds/core/Arm7Subset.kt` contains a standalone, incomplete Kotlin ARM-state interpreter experiment: a small subset of data-processing instructions, immediate branches, and simple word loads/stores over a 1 MiB byte array. It is not integrated into the Android APK, does not model DS memory/peripherals, and has known limitations; it is not a usable ARM7 or Nintendo DS emulator.
+- `Arm7SubsetTest.kt` contains four JVM test cases (MOV/ADD, branch, word store/load, unsupported opcode). The current Android GitHub Actions build does **not** compile or run those tests.
+- The Android debug APK is only a static diagnostic screen stating that it is not playable. No CPU core or game loading is present in the APK.
 
-## Limitations
+## Explicit limitations
 
-No ARM9, Thumb, MMU, DMA, timers, interrupts, sound, 2D/3D graphics, cartridge protocol, firmware, BIOS or game loader. No copyrighted BIOS/firmware or game data included. Any built APK is a diagnostic prototype and cannot play commercial DS games.
+No ARM9, Thumb mode, complete CPU/flags, memory map/MMU, DMA, timers, interrupts, sound, 2D/3D rendering, input mapping, cartridge protocol, firmware/BIOS, or game loader. No copyrighted BIOS, firmware or games are included. This APK cannot run commercial Nintendo DS games and is a nonfunctional emulator prototype, not a playable emulator.
 
-GitHub Actions builds a debug APK and runs the JVM tests. Find the APK under Actions → Android prototype build → Artifacts. Research prototype; no game compatibility implied.
+## Build
+
+GitHub Actions workflow `.github/workflows/android.yml` builds a debug APK (Android 7.0+, API 24+) and uploads it as `ds-android-lab-debug-apk` under the workflow run's Artifacts. It currently builds only the static shell. The ARM7 experiment and JVM tests are source-only and are not part of that APK/build.
