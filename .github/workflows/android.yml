@@ -18,7 +18,7 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.7'
-      - name: Build diagnostic APK
+      - name: Build ROM header diagnostic APK
         run: |
           mkdir -p app/src/main/java/lab/ds/app app/src/main
           cat > settings.gradle <<'EOF'
@@ -33,21 +33,76 @@ jobs:
           cat > app/build.gradle <<'EOF'
           plugins { id 'com.android.application' }
           android { namespace 'lab.ds.app'; compileSdk 35
-            defaultConfig { applicationId 'lab.ds.app'; minSdk 24; targetSdk 28; versionCode 1; versionName '0.1-prototype' }
+            defaultConfig { applicationId 'lab.ds.app'; minSdk 24; targetSdk 28; versionCode 2; versionName '0.2-prototype' }
           }
           EOF
           cat > app/src/main/AndroidManifest.xml <<'EOF'
-          <manifest xmlns:android="http://schemas.android.com/apk/res/android"><application android:theme="@android:style/Theme.Material.Light.NoActionBar" android:label="DS Lab Prototype"><activity android:name=".MainActivity" android:exported="true"><intent-filter><action android:name="android.intent.action.MAIN"/><category android:name="android.intent.category.LAUNCHER"/></intent-filter></activity></application></manifest>
+          <manifest xmlns:android="http://schemas.android.com/apk/res/android"><application android:theme="@android:style/Theme.Material.Light.NoActionBar" android:label="DS Android Lab"><activity android:name=".MainActivity" android:exported="true"><intent-filter><action android:name="android.intent.action.MAIN"/><category android:name="android.intent.category.LAUNCHER"/></intent-filter></activity></application></manifest>
           EOF
           cat > app/src/main/java/lab/ds/app/MainActivity.java <<'EOF'
           package lab.ds.app;
-          import android.app.Activity; import android.os.Bundle; import android.graphics.Color; import android.view.Gravity; import android.widget.TextView; import android.widget.LinearLayout;
-          public class MainActivity extends Activity { @Override public void onCreate(Bundle b) { super.onCreate(b); LinearLayout box=new LinearLayout(this); box.setOrientation(1); box.setGravity(Gravity.CENTER); box.setPadding(32,32,32,32); box.setBackgroundColor(Color.rgb(20,28,40)); TextView t=new TextView(this); t.setTextColor(Color.WHITE); t.setTextSize(21); t.setGravity(Gravity.CENTER); t.setText("DS Android Lab\n\nDiagnostic prototype only.\nNot a playable Nintendo DS emulator.\nNo BIOS or games included.\n\nSee the repository README for status."); box.addView(t); setContentView(box); } }
+          import android.app.Activity;
+          import android.os.Bundle;
+          import android.content.Intent;
+          import android.net.Uri;
+          import android.graphics.Color;
+          import android.view.Gravity;
+          import android.view.ViewGroup;
+          import android.widget.TextView;
+          import android.widget.Button;
+          import android.widget.LinearLayout;
+          import android.content.res.AssetFileDescriptor;
+          import java.io.InputStream;
+          import java.nio.ByteBuffer;
+          import java.nio.ByteOrder;
+          import java.nio.charset.StandardCharsets;
+
+          public class MainActivity extends Activity {
+            private static final int PICK_ROM = 42;
+            private TextView status;
+            @Override public void onCreate(Bundle b) {
+              super.onCreate(b);
+              LinearLayout box = new LinearLayout(this);
+              box.setOrientation(LinearLayout.VERTICAL);
+              box.setGravity(Gravity.CENTER);
+              box.setPadding(28, 28, 28, 28);
+              box.setBackgroundColor(Color.rgb(20, 28, 40));
+              TextView title = new TextView(this);
+              title.setText("DS Android Lab"); title.setTextColor(Color.WHITE); title.setTextSize(25); title.setGravity(Gravity.CENTER);
+              box.addView(title, new LinearLayout.LayoutParams(-1, -2));
+              Button choose = new Button(this); choose.setText("Selecionar ROM .nds");
+              choose.setOnClickListener(v -> { Intent i = new Intent(Intent.ACTION_OPEN_DOCUMENT); i.addCategory(Intent.CATEGORY_OPENABLE); i.setType("*/*"); startActivityForResult(i, PICK_ROM); });
+              box.addView(choose, new LinearLayout.LayoutParams(-1, -2));
+              status = new TextView(this); status.setTextColor(Color.WHITE); status.setTextSize(16); status.setPadding(0, 24, 0, 0); status.setText("Escolha um arquivo .nds para validar o cabeçalho.\n\nEsta versão ainda NÃO executa jogos e não implementa HLE/BIOS.");
+              box.addView(status, new LinearLayout.LayoutParams(-1, -2)); setContentView(box);
+            }
+            @Override protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+              super.onActivityResult(requestCode, resultCode, data);
+              if (requestCode != PICK_ROM || resultCode != RESULT_OK || data == null || data.getData() == null) return;
+              Uri uri = data.getData();
+              try (AssetFileDescriptor afd = getContentResolver().openAssetFileDescriptor(uri, "r"); InputStream in = getContentResolver().openInputStream(uri)) {
+                if (afd == null || in == null) throw new Exception("Não foi possível abrir o arquivo.");
+                long length = afd.getLength(); byte[] h = new byte[0x160]; int got = 0;
+                while (got < h.length) { int n = in.read(h, got, h.length - got); if (n < 0) break; got += n; }
+                if (got < h.length) throw new Exception("Arquivo curto demais para ser uma ROM de DS.");
+                ByteBuffer b = ByteBuffer.wrap(h).order(ByteOrder.LITTLE_ENDIAN);
+                String name = new String(h, 0, 12, StandardCharsets.US_ASCII).replace("\u0000", "").trim();
+                String game = new String(h, 12, 4, StandardCharsets.US_ASCII);
+                long a9off = u32(b, 0x20), a9entry = u32(b, 0x24), a9load = u32(b, 0x28), a9size = u32(b, 0x2c);
+                long a7off = u32(b, 0x30), a7entry = u32(b, 0x34), a7load = u32(b, 0x38), a7size = u32(b, 0x3c);
+                if (!game.matches("[A-Z0-9]{4}")) throw new Exception("Código de jogo inválido; este arquivo não parece uma ROM de DS.");
+                if (length < 0 || !inside(a9off, a9size, length) || !inside(a7off, a7size, length) || a9size == 0 || a7size == 0) throw new Exception("Cabeçalho ou limites dos binários inválidos.");
+                status.setText("Cabeçalho NDS reconhecido (não significa que o jogo rode)\n\nTítulo: " + name + "\nCódigo: " + game + "\nTamanho: " + length + " bytes\nARM9: offset 0x" + Long.toHexString(a9off) + ", entrada 0x" + Long.toHexString(a9entry) + ", carga 0x" + Long.toHexString(a9load) + ", " + a9size + " bytes\nARM7: offset 0x" + Long.toHexString(a7off) + ", entrada 0x" + Long.toHexString(a7entry) + ", carga 0x" + Long.toHexString(a7load) + ", " + a7size + " bytes\n\nAinda não executa jogos. HLE, ARM9, vídeo e áudio integrado não estão implementados.");
+              } catch (Exception e) { status.setText("Falha ao validar ROM: " + e.getMessage()); }
+            }
+            private static long u32(ByteBuffer b, int p) { return Integer.toUnsignedLong(b.getInt(p)); }
+            private static boolean inside(long off, long size, long length) { return off >= 0 && size >= 0 && off <= length && size <= length - off; }
+          }
           EOF
           gradle wrapper --gradle-version 8.7
           ./gradlew --no-daemon assembleDebug
       - uses: actions/upload-artifact@v4
         with:
-          name: ds-android-lab-debug-apk
+          name: ds-android-lab-rom-header-apk
           path: app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
