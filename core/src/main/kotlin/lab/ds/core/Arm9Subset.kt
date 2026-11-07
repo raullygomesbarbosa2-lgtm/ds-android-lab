@@ -17,7 +17,7 @@ class Arm9Subset(val memory: ByteArray = ByteArray(1 shl 20)) {
         val unsignedB = b.toLong() and 0xffffffffL
         val carry = if (subtract) unsignedA >= unsignedB + (1L - carryIn.toLong()) else unsignedA + unsignedB + carryIn.toLong() > 0xffffffffL
         val overflow = if (subtract) ((a xor b) and (a xor result)) < 0 else ((a xor result) and (b xor result)) < 0
-        cpsr = (cpsr and 0x8fffffff) or (if (carry) 1 shl 29 else 0) or (if (overflow) 1 shl 28 else 0)
+        cpsr = (cpsr and 0x8fffffff.toInt()) or (if (carry) 1 shl 29 else 0) or (if (overflow) 1 shl 28 else 0)
     }
     fun step():Int {
         val pc=r[15]; val ins=read32(pc); r[15]=pc+4
