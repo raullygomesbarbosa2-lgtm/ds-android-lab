@@ -20,7 +20,7 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.7'
-      - name: Build ROM header diagnostic APK
+      - name: Build framebuffer demo APK
         run: |
           mkdir -p app/src/main/java/lab/ds/app app/src/main
           cat > settings.gradle <<'EOF'
@@ -35,7 +35,7 @@ jobs:
           cat > app/build.gradle <<'EOF'
           plugins { id 'com.android.application' }
           android { namespace 'lab.ds.app'; compileSdk 35
-            defaultConfig { applicationId 'lab.ds.app'; minSdk 24; targetSdk 28; versionCode 2; versionName '0.2-prototype' }
+            defaultConfig { applicationId 'lab.ds.app'; minSdk 24; targetSdk 28; versionCode 3; versionName '0.3-framebuffer-demo' }
           }
           EOF
           cat > app/src/main/AndroidManifest.xml <<'EOF'
@@ -48,73 +48,42 @@ jobs:
           import android.content.Intent;
           import android.net.Uri;
           import android.graphics.Color;
+          import android.graphics.Bitmap;
           import android.view.Gravity;
-          import android.view.ViewGroup;
           import android.widget.TextView;
           import android.widget.Button;
           import android.widget.LinearLayout;
+          import android.widget.ImageView;
           import android.content.res.AssetFileDescriptor;
           import java.io.InputStream;
           import java.nio.ByteBuffer;
           import java.nio.ByteOrder;
           import java.nio.charset.StandardCharsets;
-
           public class MainActivity extends Activity {
-            private static final int PICK_ROM = 42;
-            private TextView status;
-            @Override public void onCreate(Bundle b) {
-              super.onCreate(b);
-              LinearLayout box = new LinearLayout(this);
-              box.setOrientation(LinearLayout.VERTICAL);
-              box.setGravity(Gravity.CENTER);
-              box.setPadding(28, 28, 28, 28);
-              box.setBackgroundColor(Color.rgb(20, 28, 40));
-              TextView title = new TextView(this);
-              title.setText("DS Android Lab"); title.setTextColor(Color.WHITE); title.setTextSize(25); title.setGravity(Gravity.CENTER);
-              box.addView(title, new LinearLayout.LayoutParams(-1, -2));
-              Button choose = new Button(this); choose.setText("Selecionar ROM .nds");
-              choose.setOnClickListener(v -> { Intent i = new Intent(Intent.ACTION_OPEN_DOCUMENT); i.addCategory(Intent.CATEGORY_OPENABLE); i.setType("*/*"); startActivityForResult(i, PICK_ROM); });
-              box.addView(choose, new LinearLayout.LayoutParams(-1, -2));
-              status = new TextView(this); status.setTextColor(Color.WHITE); status.setTextSize(16); status.setPadding(0, 24, 0, 0); status.setText("Escolha um arquivo .nds para validar o cabeçalho.\n\nEsta versão ainda NÃO executa jogos e não implementa HLE/BIOS.");
-              box.addView(status, new LinearLayout.LayoutParams(-1, -2)); setContentView(box);
+            private static final int PICK_ROM=42; private TextView status;
+            @Override public void onCreate(Bundle b) { super.onCreate(b);
+              LinearLayout box=new LinearLayout(this); box.setOrientation(1); box.setGravity(Gravity.CENTER); box.setPadding(20,20,20,20); box.setBackgroundColor(Color.rgb(20,28,40));
+              TextView title=new TextView(this); title.setText("DS Android Lab — demo visual"); title.setTextColor(Color.WHITE); title.setTextSize(22); title.setGravity(Gravity.CENTER); box.addView(title);
+              ImageView screen=new ImageView(this); screen.setAdjustViewBounds(true); screen.setScaleType(ImageView.ScaleType.FIT_CENTER); screen.setImageBitmap(makeDemo()); box.addView(screen,new LinearLayout.LayoutParams(-1,0,1));
+              TextView notice=new TextView(this); notice.setTextColor(Color.YELLOW); notice.setGravity(Gravity.CENTER); notice.setText("Imagem de teste gerada pelo app. NÃO é imagem de uma ROM; não executa jogos nem implementa BIOS/HLE."); box.addView(notice);
+              Button choose=new Button(this); choose.setText("Selecionar ROM .nds (validar cabeçalho)"); choose.setOnClickListener(v->{Intent i=new Intent(Intent.ACTION_OPEN_DOCUMENT);i.addCategory(Intent.CATEGORY_OPENABLE);i.setType("*/*");startActivityForResult(i,PICK_ROM);}); box.addView(choose);
+              status=new TextView(this); status.setTextColor(Color.WHITE); status.setTextSize(14); status.setText("Sem execução de ROM. A tela acima é apenas uma demonstração de pixels."); box.addView(status); setContentView(box);
             }
-            @Override protected void onActivityResult(int requestCode, int resultCode, Intent data) {
-              super.onActivityResult(requestCode, resultCode, data);
-              if (requestCode != PICK_ROM || resultCode != RESULT_OK || data == null || data.getData() == null) return;
-              Uri uri = data.getData();
-              try (AssetFileDescriptor afd = getContentResolver().openAssetFileDescriptor(uri, "r"); InputStream in = getContentResolver().openInputStream(uri)) {
-                if (afd == null || in == null) throw new Exception("Não foi possível abrir o arquivo.");
-                long length = afd.getLength(); byte[] h = new byte[0x160]; int got = 0;
-                while (got < h.length) { int n = in.read(h, got, h.length - got); if (n < 0) break; got += n; }
-                if (got < h.length) throw new Exception("Arquivo curto demais para ser uma ROM de DS.");
-                ByteBuffer b = ByteBuffer.wrap(h).order(ByteOrder.LITTLE_ENDIAN);
-                String name = new String(h, 0, 12, StandardCharsets.US_ASCII).replace("\u0000", "").trim();
-                String game = new String(h, 12, 4, StandardCharsets.US_ASCII);
-                long a9off = u32(b, 0x20), a9entry = u32(b, 0x24), a9load = u32(b, 0x28), a9size = u32(b, 0x2c);
-                long a7off = u32(b, 0x30), a7entry = u32(b, 0x34), a7load = u32(b, 0x38), a7size = u32(b, 0x3c);
-                if (!game.matches("[A-Z0-9]{4}")) throw new Exception("Código de jogo inválido; este arquivo não parece uma ROM de DS.");
-                if (length < 0 || !inside(a9off, a9size, length) || !inside(a7off, a7size, length) || a9size == 0 || a7size == 0) throw new Exception("Cabeçalho ou limites dos binários inválidos.");
-                status.setText("Cabeçalho NDS reconhecido (não significa que o jogo rode)\n\nTítulo: " + name + "\nCódigo: " + game + "\nTamanho: " + length + " bytes\nARM9: offset 0x" + Long.toHexString(a9off) + ", entrada 0x" + Long.toHexString(a9entry) + ", carga 0x" + Long.toHexString(a9load) + ", " + a9size + " bytes\nARM7: offset 0x" + Long.toHexString(a7off) + ", entrada 0x" + Long.toHexString(a7entry) + ", carga 0x" + Long.toHexString(a7load) + ", " + a7size + " bytes\n\nAinda não executa jogos. HLE, ARM9, vídeo e áudio integrado não estão implementados.");
-              } catch (Exception e) { status.setText("Falha ao validar ROM: " + e.getMessage()); }
-            }
-            private static long u32(ByteBuffer b, int p) { return Integer.toUnsignedLong(b.getInt(p)); }
-            private static boolean inside(long off, long size, long length) { return off >= 0 && size >= 0 && off <= length && size <= length - off; }
+            private Bitmap makeDemo(){ int w=256,h=192; int[] p=new int[w*h]; for(int y=0;y<h;y++)for(int x=0;x<w;x++){int r=(x*31/w)&31,g=(y*63/h)&63,b=((x+y)*31/(w+h))&31; int rr=(r<<3)|(r>>2),gg=(g<<2)|(g>>4),bb=(b<<3)|(b>>2); p[y*w+x]=Color.rgb(rr,gg,bb);} return Bitmap.createBitmap(p,w,h,Bitmap.Config.ARGB_8888); }
+            @Override protected void onActivityResult(int requestCode,int resultCode,Intent data){super.onActivityResult(requestCode,resultCode,data); if(requestCode!=PICK_ROM||resultCode!=RESULT_OK||data==null||data.getData()==null)return; Uri uri=data.getData(); try(AssetFileDescriptor afd=getContentResolver().openAssetFileDescriptor(uri,"r"); InputStream in=getContentResolver().openInputStream(uri)){if(afd==null||in==null)throw new Exception("Não foi possível abrir arquivo."); long length=afd.getLength(); byte[] h=new byte[0x160];int got=0;while(got<h.length){int n=in.read(h,got,h.length-got);if(n<0)break;got+=n;}if(got<h.length)throw new Exception("ROM curta demais."); ByteBuffer b=ByteBuffer.wrap(h).order(ByteOrder.LITTLE_ENDIAN);String name=new String(h,0,12,StandardCharsets.US_ASCII).replace("\u0000","").trim();String game=new String(h,12,4,StandardCharsets.US_ASCII);long a9=u32(b,0x20),s9=u32(b,0x2c),a7=u32(b,0x30),s7=u32(b,0x3c);if(!game.matches("[A-Z0-9]{4}")||length<0||!inside(a9,s9,length)||!inside(a7,s7,length)||s9==0||s7==0)throw new Exception("Cabeçalho NDS inválido.");status.setText("ROM reconhecida: "+name+" ("+game+"). Cabeçalho validado; jogo NÃO executado e pixels NÃO vêm da ROM.");}catch(Exception e){status.setText("Falha ao validar: "+e.getMessage());}}
+            private static long u32(ByteBuffer b,int p){return Integer.toUnsignedLong(b.getInt(p));} private static boolean inside(long o,long s,long l){return o>=0&&s>=0&&o<=l&&s<=l-o;}
           }
           EOF
           gradle wrapper --gradle-version 8.7
           ./gradlew --no-daemon assembleDebug
       - uses: actions/upload-artifact@v4
         with:
-          name: ds-android-lab-rom-header-apk
+          name: ds-android-lab-framebuffer-demo-apk
           path: app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
-      - name: Publish clearly marked prototype prerelease
+      - name: Publish clearly marked demo prerelease
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          tag="v0.2-prototype-${GITHUB_RUN_NUMBER}"
-          gh release create "$tag" app/build/outputs/apk/debug/app-debug.apk \
-            --repo "$GITHUB_REPOSITORY" \
-            --prerelease \
-            --title "DS Android Lab — prototype (run ${GITHUB_RUN_NUMBER})" \
-            --notes "Prototype only: selects a .nds file and validates its header. It does NOT run games and does not implement emulation, BIOS/HLE, graphics, or audio. No BIOS or game files are included."
+          tag="v0.3-framebuffer-demo-${GITHUB_RUN_NUMBER}"
+          gh release create "$tag" app/build/outputs/apk/debug/app-debug.apk --repo "$GITHUB_REPOSITORY" --prerelease --title "DS Android Lab — framebuffer demo (run ${GITHUB_RUN_NUMBER})" --notes "Visual framebuffer demo only: the displayed gradient is generated by the app, not by a Nintendo DS ROM. The app only validates ROM headers. No game execution, BIOS/HLE, DS hardware emulation, or game graphics."
