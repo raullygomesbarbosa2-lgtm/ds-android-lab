@@ -12,12 +12,11 @@ class Arm9Subset(val memory: ByteArray = ByteArray(1 shl 20)) {
     private fun condition(c:Int):Boolean { val n=bit(31); val z=bit(30); val cbit=bit(29); val v=bit(28); return when(c) { 0->z;1->!z;2->cbit;3->!cbit;4->n;5->!n;6->v;7->!v;8->cbit&&!z;9->!cbit||z;10->n==v;11->n!=v;12->!z&&n==v;13->z||n!=v;14->true;else->throw UnsupportedOperationException("NV condition") } }
     private fun setNz(x:Int) { cpsr=(cpsr and 0x3fffffff) or (if(x<0) Int.MIN_VALUE else 0) or (if(x==0) 1 shl 30 else 0) }
     private fun setArithmeticFlags(a:Int, b:Int, carryIn:Int, result:Int, subtract:Boolean) {
-        setNz(result)
         val unsignedA = a.toLong() and 0xffffffffL
         val unsignedB = b.toLong() and 0xffffffffL
         val carry = if (subtract) unsignedA >= unsignedB + (1L - carryIn.toLong()) else unsignedA + unsignedB + carryIn.toLong() > 0xffffffffL
         val overflow = if (subtract) ((a xor b) and (a xor result)) < 0 else ((a xor result) and (b xor result)) < 0
-        cpsr = (cpsr and 0x8fffffff.toInt()) or (if (carry) 1 shl 29 else 0) or (if (overflow) 1 shl 28 else 0)
+        cpsr = (cpsr and 0x0fffffff) or (if (result < 0) Int.MIN_VALUE else 0) or (if (result == 0) 1 shl 30 else 0) or (if (carry) 1 shl 29 else 0) or (if (overflow) 1 shl 28 else 0)
     }
     fun step():Int {
         val pc=r[15]; val ins=read32(pc); r[15]=pc+4
