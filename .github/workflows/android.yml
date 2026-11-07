@@ -3,6 +3,8 @@ on:
   push:
     branches: [ main ]
   workflow_dispatch:
+permissions:
+  contents: write
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -106,3 +108,13 @@ jobs:
           name: ds-android-lab-rom-header-apk
           path: app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
+      - name: Publish clearly marked prototype prerelease
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tag="v0.2-prototype-${GITHUB_RUN_NUMBER}"
+          gh release create "$tag" app/build/outputs/apk/debug/app-debug.apk \
+            --repo "$GITHUB_REPOSITORY" \
+            --prerelease \
+            --title "DS Android Lab — prototype (run ${GITHUB_RUN_NUMBER})" \
+            --notes "Prototype only: selects a .nds file and validates its header. It does NOT run games and does not implement emulation, BIOS/HLE, graphics, or audio. No BIOS or game files are included."
