@@ -13,6 +13,11 @@ jobs:
           distribution: temurin
           java-version: '17'
       - uses: android-actions/setup-android@v3
+        with:
+          packages: 'platform-tools platforms;android-35 build-tools;35.0.0'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.7'
       - name: Build diagnostic APK
         run: |
           mkdir -p app/src/main/java/lab/ds/app app/src/main
@@ -23,14 +28,12 @@ jobs:
           include ':app'
           EOF
           cat > build.gradle <<'EOF'
-          plugins {
-              id 'com.android.application' version '8.6.1' apply false
-          }
+          plugins { id 'com.android.application' version '8.6.1' apply false }
           EOF
           cat > app/build.gradle <<'EOF'
           plugins { id 'com.android.application' }
           android { namespace 'lab.ds.app'; compileSdk 35
-              defaultConfig { applicationId 'lab.ds.app'; minSdk 24; targetSdk 28; versionCode 1; versionName '0.1-prototype' }
+            defaultConfig { applicationId 'lab.ds.app'; minSdk 24; targetSdk 28; versionCode 1; versionName '0.1-prototype' }
           }
           EOF
           cat > app/src/main/AndroidManifest.xml <<'EOF'
@@ -38,18 +41,8 @@ jobs:
           EOF
           cat > app/src/main/java/lab/ds/app/MainActivity.java <<'EOF'
           package lab.ds.app;
-          import android.app.Activity;
-          import android.os.Bundle;
-          import android.graphics.Color;
-          import android.view.Gravity;
-          import android.widget.TextView;
-          import android.widget.LinearLayout;
-          public class MainActivity extends Activity {
-            @Override public void onCreate(Bundle b) { super.onCreate(b);
-              LinearLayout box=new LinearLayout(this); box.setOrientation(1); box.setGravity(Gravity.CENTER); box.setPadding(32,32,32,32); box.setBackgroundColor(Color.rgb(20,28,40));
-              TextView t=new TextView(this); t.setTextColor(Color.WHITE); t.setTextSize(21); t.setGravity(Gravity.CENTER); t.setText("DS Android Lab\n\nDiagnostic prototype only.\nNot a playable Nintendo DS emulator.\nNo BIOS or games included.\n\nSee the repository README for status."); box.addView(t); setContentView(box);
-            }
-          }
+          import android.app.Activity; import android.os.Bundle; import android.graphics.Color; import android.view.Gravity; import android.widget.TextView; import android.widget.LinearLayout;
+          public class MainActivity extends Activity { @Override public void onCreate(Bundle b) { super.onCreate(b); LinearLayout box=new LinearLayout(this); box.setOrientation(1); box.setGravity(Gravity.CENTER); box.setPadding(32,32,32,32); box.setBackgroundColor(Color.rgb(20,28,40)); TextView t=new TextView(this); t.setTextColor(Color.WHITE); t.setTextSize(21); t.setGravity(Gravity.CENTER); t.setText("DS Android Lab\n\nDiagnostic prototype only.\nNot a playable Nintendo DS emulator.\nNo BIOS or games included.\n\nSee the repository README for status."); box.addView(t); setContentView(box); } }
           EOF
           gradle wrapper --gradle-version 8.7
           ./gradlew --no-daemon assembleDebug
