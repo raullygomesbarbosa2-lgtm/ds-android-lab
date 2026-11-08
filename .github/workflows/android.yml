@@ -1,4 +1,4 @@
-name: Android prototype build
+name: Android ROM banner icon build
 on:
   push:
     branches: [ main ]
@@ -20,7 +20,7 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.7'
-      - name: Build framebuffer demo APK
+      - name: Build Android ROM banner icon viewer APK
         run: |
           mkdir -p app/src/main/java/lab/ds/app app/src/main
           cat > settings.gradle <<'EOF'
@@ -35,7 +35,7 @@ jobs:
           cat > app/build.gradle <<'EOF'
           plugins { id 'com.android.application' }
           android { namespace 'lab.ds.app'; compileSdk 35
-            defaultConfig { applicationId 'lab.ds.app'; minSdk 24; targetSdk 28; versionCode 3; versionName '0.3-framebuffer-demo' }
+            defaultConfig { applicationId 'lab.ds.app'; minSdk 24; targetSdk 28; versionCode 4; versionName '0.4-rom-banner-icon' }
           }
           EOF
           cat > app/src/main/AndroidManifest.xml <<'EOF'
@@ -46,7 +46,6 @@ jobs:
           import android.app.Activity;
           import android.os.Bundle;
           import android.content.Intent;
-          import android.net.Uri;
           import android.graphics.Color;
           import android.graphics.Bitmap;
           import android.view.Gravity;
@@ -60,17 +59,20 @@ jobs:
           import java.nio.ByteOrder;
           import java.nio.charset.StandardCharsets;
           public class MainActivity extends Activity {
-            private static final int PICK_ROM=42; private TextView status;
+            private static final int PICK_ROM=42; private TextView status; private ImageView romIcon;
             @Override public void onCreate(Bundle b) { super.onCreate(b);
               LinearLayout box=new LinearLayout(this); box.setOrientation(1); box.setGravity(Gravity.CENTER); box.setPadding(20,20,20,20); box.setBackgroundColor(Color.rgb(20,28,40));
-              TextView title=new TextView(this); title.setText("DS Android Lab — demo visual"); title.setTextColor(Color.WHITE); title.setTextSize(22); title.setGravity(Gravity.CENTER); box.addView(title);
-              ImageView screen=new ImageView(this); screen.setAdjustViewBounds(true); screen.setScaleType(ImageView.ScaleType.FIT_CENTER); screen.setImageBitmap(makeDemo()); box.addView(screen,new LinearLayout.LayoutParams(-1,0,1));
-              TextView notice=new TextView(this); notice.setTextColor(Color.YELLOW); notice.setGravity(Gravity.CENTER); notice.setText("Imagem de teste gerada pelo app. NÃO é imagem de uma ROM; não executa jogos nem implementa BIOS/HLE."); box.addView(notice);
-              Button choose=new Button(this); choose.setText("Selecionar ROM .nds (validar cabeçalho)"); choose.setOnClickListener(v->{Intent i=new Intent(Intent.ACTION_OPEN_DOCUMENT);i.addCategory(Intent.CATEGORY_OPENABLE);i.setType("*/*");startActivityForResult(i,PICK_ROM);}); box.addView(choose);
-              status=new TextView(this); status.setTextColor(Color.WHITE); status.setTextSize(14); status.setText("Sem execução de ROM. A tela acima é apenas uma demonstração de pixels."); box.addView(status); setContentView(box);
+              TextView title=new TextView(this); title.setText("DS Android Lab — ROM banner icon"); title.setTextColor(Color.WHITE); title.setTextSize(22); title.setGravity(Gravity.CENTER); box.addView(title);
+              romIcon=new ImageView(this); romIcon.setAdjustViewBounds(true); romIcon.setScaleType(ImageView.ScaleType.FIT_CENTER); box.addView(romIcon,new LinearLayout.LayoutParams(160,160));
+              TextView notice=new TextView(this); notice.setTextColor(Color.YELLOW); notice.setGravity(Gravity.CENTER); notice.setText("Mostra somente o ícone 32×32 embutido no banner da ROM. NÃO executa o jogo nem mostra gráficos da partida."); box.addView(notice);
+              Button choose=new Button(this); choose.setText("Selecionar ROM .nds"); choose.setOnClickListener(v->{Intent i=new Intent(Intent.ACTION_OPEN_DOCUMENT);i.addCategory(Intent.CATEGORY_OPENABLE);i.setType("*/*");startActivityForResult(i,PICK_ROM);}); box.addView(choose);
+              status=new TextView(this); status.setTextColor(Color.WHITE); status.setTextSize(14); status.setGravity(Gravity.CENTER); status.setText("Selecione uma ROM .nds para tentar ler seu ícone embutido."); box.addView(status); setContentView(box);
             }
-            private Bitmap makeDemo(){ int w=256,h=192; int[] p=new int[w*h]; for(int y=0;y<h;y++)for(int x=0;x<w;x++){int r=(x*31/w)&31,g=(y*63/h)&63,b=((x+y)*31/(w+h))&31; int rr=(r<<3)|(r>>2),gg=(g<<2)|(g>>4),bb=(b<<3)|(b>>2); p[y*w+x]=Color.rgb(rr,gg,bb);} return Bitmap.createBitmap(p,w,h,Bitmap.Config.ARGB_8888); }
-            @Override protected void onActivityResult(int requestCode,int resultCode,Intent data){super.onActivityResult(requestCode,resultCode,data); if(requestCode!=PICK_ROM||resultCode!=RESULT_OK||data==null||data.getData()==null)return; Uri uri=data.getData(); try(AssetFileDescriptor afd=getContentResolver().openAssetFileDescriptor(uri,"r"); InputStream in=getContentResolver().openInputStream(uri)){if(afd==null||in==null)throw new Exception("Não foi possível abrir arquivo."); long length=afd.getLength(); byte[] h=new byte[0x160];int got=0;while(got<h.length){int n=in.read(h,got,h.length-got);if(n<0)break;got+=n;}if(got<h.length)throw new Exception("ROM curta demais."); ByteBuffer b=ByteBuffer.wrap(h).order(ByteOrder.LITTLE_ENDIAN);String name=new String(h,0,12,StandardCharsets.US_ASCII).replace("\u0000","").trim();String game=new String(h,12,4,StandardCharsets.US_ASCII);long a9=u32(b,0x20),s9=u32(b,0x2c),a7=u32(b,0x30),s7=u32(b,0x3c);if(!game.matches("[A-Z0-9]{4}")||length<0||!inside(a9,s9,length)||!inside(a7,s7,length)||s9==0||s7==0)throw new Exception("Cabeçalho NDS inválido.");status.setText("ROM reconhecida: "+name+" ("+game+"). Cabeçalho validado; jogo NÃO executado e pixels NÃO vêm da ROM.");}catch(Exception e){status.setText("Falha ao validar: "+e.getMessage());}}
+            @Override protected void onActivityResult(int requestCode,int resultCode,Intent data){super.onActivityResult(requestCode,resultCode,data); if(requestCode!=PICK_ROM||resultCode!=RESULT_OK||data==null||data.getData()==null)return; romIcon.setImageDrawable(null); UriHolder selected=new UriHolder(data.getData()); try(AssetFileDescriptor afd=getContentResolver().openAssetFileDescriptor(selected.uri,"r"); InputStream in=getContentResolver().openInputStream(selected.uri)){if(afd==null||in==null)throw new Exception("Não foi possível abrir arquivo."); long length=afd.getLength(); byte[] h=new byte[0x160];int got=readFully(in,h);if(got<h.length)throw new Exception("ROM curta demais."); ByteBuffer b=ByteBuffer.wrap(h).order(ByteOrder.LITTLE_ENDIAN);String name=new String(h,0,12,StandardCharsets.US_ASCII).replace("\u0000","").trim();String game=new String(h,12,4,StandardCharsets.US_ASCII);long a9=u32(b,0x20),s9=u32(b,0x2c),a7=u32(b,0x30),s7=u32(b,0x3c),banner=u32(b,0x68);if(!game.matches("[A-Z0-9]{4}")||length<0||!inside(a9,s9,length)||!inside(a7,s7,length)||s9==0||s7==0)throw new Exception("Cabeçalho NDS inválido.");if(banner==0){status.setText("ROM reconhecida: "+name+" ("+game+"), mas não há banner/ícone (offset zero). Jogo não executado.");return;}if(banner<0x160||!inside(banner,0x240,length)){status.setText("ROM reconhecida: "+name+" ("+game+"), mas o banner/ícone está fora dos limites ou não é suportado. Jogo não executado.");return;}skipFully(in,banner-0x160);byte[] payload=new byte[0x240];if(readFully(in,payload)<payload.length)throw new Exception("Dados do banner incompletos.");Bitmap icon=decodeIcon(payload);if(icon==null)throw new Exception("Não foi possível decodificar o ícone do banner.");romIcon.setImageBitmap(icon);status.setText("Ícone embutido na ROM: "+name+" ("+game+"). Exibe a arte do banner; o jogo NÃO é executado e os gráficos da partida não são mostrados.");}catch(Exception e){status.setText("Falha ao ler ícone da ROM: "+e.getMessage()+". O jogo não foi executado.");}}
+            private static final class UriHolder { final android.net.Uri uri; UriHolder(android.net.Uri u){uri=u;} }
+            private static int readFully(InputStream in,byte[] out)throws java.io.IOException{int n=0;while(n<out.length){int r=in.read(out,n,out.length-n);if(r<0)break;n+=r;}return n;}
+            private static void skipFully(InputStream in,long count)throws java.io.IOException{while(count>0){long n=in.skip(count);if(n<=0){if(in.read()<0)throw new java.io.EOFException("Fim inesperado antes do banner.");n=1;}count-=n;}}
+            private static Bitmap decodeIcon(byte[] banner){int[] colors=new int[16];for(int i=0;i<16;i++){int v=(banner[0x220+i*2]&255)|((banner[0x221+i*2]&255)<<8);int r=v&31,g=(v>>>5)&31,b=(v>>>10)&31;int rr=(r<<3)|(r>>>2),gg=(g<<3)|(g>>>2),bb=(b<<3)|(b>>>2);colors[i]=i==0?Color.TRANSPARENT:Color.rgb(rr,gg,bb);}int[] pixels=new int[32*32];int data=0x20;for(int ty=0;ty<4;ty++)for(int tx=0;tx<4;tx++)for(int y=0;y<8;y++)for(int x=0;x<8;x++){int index=banner[data++]&255;int px=tx*8+x,py=ty*8+y;pixels[py*32+px]=colors[index&15];pixels[py*32+px+1]=colors[(index>>>4)&15];x++;}return Bitmap.createBitmap(pixels,32,32,Bitmap.Config.ARGB_8888);}
             private static long u32(ByteBuffer b,int p){return Integer.toUnsignedLong(b.getInt(p));} private static boolean inside(long o,long s,long l){return o>=0&&s>=0&&o<=l&&s<=l-o;}
           }
           EOF
@@ -78,12 +80,12 @@ jobs:
           ./gradlew --no-daemon assembleDebug
       - uses: actions/upload-artifact@v4
         with:
-          name: ds-android-lab-framebuffer-demo-apk
+          name: ds-android-lab-rom-banner-icon-apk
           path: app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
-      - name: Publish clearly marked demo prerelease
+      - name: Publish ROM banner icon viewer prerelease
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          tag="v0.3-framebuffer-demo-${GITHUB_RUN_NUMBER}"
-          gh release create "$tag" app/build/outputs/apk/debug/app-debug.apk --repo "$GITHUB_REPOSITORY" --prerelease --title "DS Android Lab — framebuffer demo (run ${GITHUB_RUN_NUMBER})" --notes "Visual framebuffer demo only: the displayed gradient is generated by the app, not by a Nintendo DS ROM. The app only validates ROM headers. No game execution, BIOS/HLE, DS hardware emulation, or game graphics."
+          tag="v0.4-rom-banner-icon-${GITHUB_RUN_NUMBER}"
+          gh release create "$tag" app/build/outputs/apk/debug/app-debug.apk --repo "$GITHUB_REPOSITORY" --prerelease --title "DS Android Lab — ROM banner icon viewer (run ${GITHUB_RUN_NUMBER})" --notes "This build reads and displays the actual 32x32 icon embedded in a Nintendo DS ROM banner when present. It does not execute/emulate the game and does not show gameplay graphics. No BIOS, firmware, emulator core, or game files are included."
